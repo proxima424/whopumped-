@@ -17,6 +17,7 @@ import 'chartjs-adapter-date-fns';
 import { GeckoTerminalAPI } from './api/geckoTerminal';
 import { fetchTimestampFromTweet, isValidTweetUrl } from './components/tweetUtils';
 import './App.css';
+import Scraper from './scraper'; // Import Scraper class
 
 // Register Chart.js components
 ChartJS.register(
@@ -40,6 +41,7 @@ function App() {
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
   const geckoAPI = new GeckoTerminalAPI();
+  const [scraper, setScraper] = useState(null);
 
   // Constants
   const PRICE_HISTORY_DAYS = 90; // 3 months of price history
@@ -52,6 +54,32 @@ function App() {
     base: 'base',
     solana: 'solana'
   };
+
+  // Twitter credentials from environment variables
+  const twitterUsername = process.env.REACT_APP_TWITTER_USERNAME;
+  const twitterPassword = process.env.REACT_APP_TWITTER_PASSWORD;
+
+  useEffect(() => {
+    // Initialize scraper with credentials
+    if (twitterUsername && twitterPassword) {
+      const newScraper = new Scraper({
+        username: twitterUsername,
+        password: twitterPassword
+      });
+      setScraper(newScraper);
+      console.log('Twitter scraper initialized');
+    } else {
+      console.error('Twitter credentials missing');
+    }
+  }, [twitterUsername, twitterPassword]);
+
+  useEffect(() => {
+    // Log to verify environment variables are loaded (remove in production)
+    console.log('Twitter credentials loaded:', 
+      twitterUsername ? 'Username present' : 'Username missing',
+      twitterPassword ? 'Password present' : 'Password missing'
+    );
+  }, []);
 
   const fetchPoolData = async (address, network) => {
     try {
@@ -315,8 +343,13 @@ function App() {
       return;
     }
 
+    if (!scraper) {
+      setError('Twitter scraper not initialized. Check credentials.');
+      return;
+    }
+
     try {
-      const timestamp = await fetchTimestampFromTweet(tweetUrl);
+      const timestamp = await fetchTimestampFromTweet(tweetUrl, scraper);
       if (timestamp) {
         console.log('Tweet timestamp:', new Date(timestamp * 1000).toLocaleString());
         console.log('Unix timestamp:', timestamp);
