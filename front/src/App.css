@@ -29,29 +29,52 @@ h1 {
 }
 
 .search-section {
-  margin-bottom: 30px;
+  width: 100%;
+  max-width: 800px;
+  margin: 20px auto;
 }
 
-.search-form {
+.search-form, .tweet-form {
   display: flex;
   flex-direction: column;
-  gap: 15px;
-  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 20px;
 }
 
 .search-input {
   width: 100%;
-  max-width: 500px;
   padding: 10px;
-  background-color: #000000;
+  font-size: 16px;
+  background-color: #000;
   border: 1px solid #00ff00;
   color: #00ff00;
-  font-family: 'Source Code Pro', monospace;
+  outline: none;
+}
+
+.search-input::placeholder {
+  color: #00ff00;
+  opacity: 0.7;
 }
 
 .search-input:focus {
   outline: none;
   box-shadow: 0 0 5px #00ff00;
+}
+
+.search-button {
+  padding: 10px 20px;
+  font-size: 16px;
+  background-color: #000;
+  border: 1px solid #00ff00;
+  color: #00ff00;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.search-button:hover {
+  background-color: #00ff00;
+  color: #000;
 }
 
 .network-buttons, .timeframe-buttons {
@@ -61,59 +84,55 @@ h1 {
 }
 
 .network-button, .timeframe-button {
-  background-color: #000000;
+  padding: 5px 15px;
+  font-size: 14px;
+  background-color: #000;
   border: 1px solid #00ff00;
   color: #00ff00;
-  padding: 8px 16px;
   cursor: pointer;
-  font-family: 'Source Code Pro', monospace;
   transition: all 0.3s ease;
 }
 
-.network-button:hover, .timeframe-button:hover {
+.network-button:hover, .network-button.active {
   background-color: #00ff00;
-  color: #000000;
+  color: #000;
 }
 
-.network-button.active, .timeframe-button.active {
+.timeframe-button:hover, .timeframe-button.active {
   background-color: #00ff00;
-  color: #000000;
-}
-
-.search-button {
-  background-color: #000000;
-  border: 1px solid #00ff00;
-  color: #00ff00;
-  padding: 10px 20px;
-  cursor: pointer;
-  font-family: 'Source Code Pro', monospace;
-  width: 200px;
-}
-
-.search-button:hover {
-  background-color: #00ff00;
-  color: #000000;
+  color: #000;
 }
 
 .error-message {
-  color: #ff4444;
+  color: #ff0000;
+  text-align: center;
   margin-top: 10px;
-  font-family: monospace;
 }
 
 .tweet-form {
-  margin-top: 20px;
   display: flex;
+  flex-direction: row;
   gap: 10px;
   width: 100%;
+  margin-top: 20px;
+}
+
+.tweet-form .search-input {
+  flex: 1;
+}
+
+.tweet-form .search-button {
+  width: auto;
+  white-space: nowrap;
 }
 
 .chart-container {
   width: 100%;
+  max-width: 800px;
   height: 400px;
-  margin-top: 20px;
+  margin: 20px auto;
   border: 1px solid #00ff00;
-  padding: 10px;
+  padding: 20px;
   background-color: #000000;
   position: relative;
 }

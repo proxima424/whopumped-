@@ -10,14 +10,12 @@ import {
   Tooltip,
   Legend,
   TimeScale,
-  LineController,
-  Filler
+  LineController
 } from 'chart.js';
+import annotationPlugin from 'chartjs-plugin-annotation';
 import 'chartjs-adapter-date-fns';
 import { GeckoTerminalAPI } from './api/geckoTerminal';
-import { fetchTimestampFromTweet, isValidTweetUrl } from './components/tweetUtils';
 import './App.css';
-import Scraper from './scraper'; // Import Scraper class
 
 // Register Chart.js components
 ChartJS.register(
@@ -30,7 +28,7 @@ ChartJS.register(
   Tooltip,
   Legend,
   TimeScale,
-  Filler
+  annotationPlugin
 );
 
 function App() {
@@ -39,15 +37,16 @@ function App() {
   const [tweetUrl, setTweetUrl] = useState('');
   const [error, setError] = useState(null);
   const chartRef = useRef(null);
-  const chartInstance = useRef(null);
+  const [chartData, setChartData] = useState(null);
   const geckoAPI = new GeckoTerminalAPI();
-  const [scraper, setScraper] = useState(null);
+  const [tweetTimestamp, setTweetTimestamp] = useState(null);
 
   // Constants
-  const PRICE_HISTORY_DAYS = 90; // 3 months of price history
-  const SECONDS_PER_DAY = 86400; // 24 hours * 60 minutes * 60 seconds
-  const MAX_API_CALLS = 20; // Leave 10 calls for other operations
-  const RATE_LIMIT_DELAY = 2000; // 2 seconds between calls
+  const BACKEND_URL = 'http://localhost:3001';
+  const PRICE_HISTORY_DAYS = 90;
+  const SECONDS_PER_DAY = 86400;
+  const MAX_API_CALLS = 20;
+  const RATE_LIMIT_DELAY = 2000;
 
   const networks = {
     ethereum: 'eth',
@@ -55,31 +54,122 @@ function App() {
     solana: 'solana'
   };
 
-  // Twitter credentials from environment variables
-  const twitterUsername = process.env.REACT_APP_TWITTER_USERNAME;
-  const twitterPassword = process.env.REACT_APP_TWITTER_PASSWORD;
-
+  // Initialize chart when data changes
   useEffect(() => {
-    // Initialize scraper with credentials
-    if (twitterUsername && twitterPassword) {
-      const newScraper = new Scraper({
-        username: twitterUsername,
-        password: twitterPassword
-      });
-      setScraper(newScraper);
-      console.log('Twitter scraper initialized');
-    } else {
-      console.error('Twitter credentials missing');
+    if (!chartData || !chartRef.current) return;
+
+    // Destroy existing chart
+    const chart = ChartJS.getChart(chartRef.current);
+    if (chart) {
+      chart.destroy();
     }
-  }, [twitterUsername, twitterPassword]);
 
-  useEffect(() => {
-    // Log to verify environment variables are loaded (remove in production)
-    console.log('Twitter credentials loaded:', 
-      twitterUsername ? 'Username present' : 'Username missing',
-      twitterPassword ? 'Password present' : 'Password missing'
-    );
-  }, []);
+    const ctx = chartRef.current.getContext('2d');
+    const newChart = new ChartJS(ctx, {
+      type: 'line',
+      data: {
+        datasets: [{
+          label: 'Price (USD)',
+          data: chartData,
+          borderColor: '#00ff00',
+          borderWidth: 1,
+          pointRadius: (context) => {
+            // Get the x value of this point
+            const value = context.raw.x;
+            // Check if this point is close to the tweet timestamp
+            return tweetTimestamp && Math.abs(value - tweetTimestamp * 1000) < 3600000 ? 5 : 0;
+          },
+          pointBackgroundColor: (context) => {
+            const value = context.raw.x;
+            return tweetTimestamp && Math.abs(value - tweetTimestamp * 1000) < 3600000 ? '#FFFF00' : '#00ff00';
+          },
+          pointBorderColor: '#000000',
+          pointBorderWidth: 1,
+          fill: false
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: {
+          intersect: false,
+          mode: 'index'
+        },
+        scales: {
+          x: {
+            type: 'time',
+            time: {
+              displayFormats: {
+                millisecond: 'HH:mm:ss.SSS',
+                second: 'HH:mm:ss',
+                minute: 'HH:mm',
+                hour: 'MMM d, HH:mm',
+                day: 'MMM d',
+                week: 'MMM d',
+                month: 'MMM yyyy',
+                quarter: 'MMM yyyy',
+                year: 'yyyy'
+              },
+              tooltipFormat: 'MMM d, yyyy HH:mm:ss'
+            },
+            grid: {
+              color: '#00ff00',
+              borderColor: '#00ff00',
+              tickColor: '#00ff00'
+            },
+            ticks: {
+              color: '#00ff00',
+              maxRotation: 0,
+              autoSkip: true,
+              maxTicksLimit: 10
+            }
+          },
+          y: {
+            grid: {
+              color: '#00ff00',
+              borderColor: '#00ff00',
+              tickColor: '#00ff00'
+            },
+            ticks: {
+              color: '#00ff00',
+              callback: function(value) {
+                if (value >= 1) {
+                  return '$' + value.toFixed(2);
+                } else {
+                  return '$' + value.toFixed(6);
+                }
+              }
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            labels: {
+              color: '#00ff00'
+            }
+          },
+          tooltip: {
+            callbacks: {
+              title: function(context) {
+                const date = new Date(context[0].parsed.x);
+                const isTweetTime = tweetTimestamp && Math.abs(date.getTime() - tweetTimestamp * 1000) < 3600000;
+                return `${date.toLocaleString()}${isTweetTime ? ' (Tweet Time)' : ''}`;
+              },
+              label: function(context) {
+                const price = context.parsed.y;
+                return `Price: ${price >= 1 ? '$' + price.toFixed(2) : '$' + price.toFixed(6)}`;
+              }
+            }
+          }
+        }
+      }
+    });
+
+    return () => {
+      newChart.destroy();
+    };
+  }, [chartData, tweetTimestamp]);
 
   const fetchPoolData = async (address, network) => {
     try {
@@ -98,21 +188,17 @@ function App() {
         };
       });
 
-      console.log('Pool Addresses:', pools);
-      
       if (pools.length > 0) {
-        // Convert pool creation time to Unix timestamp
         const poolCreatedAt = Math.floor(new Date(pools[0].createdAt).getTime() / 1000);
         console.log('Pool created at:', new Date(poolCreatedAt * 1000));
         
-        const chartData = await fetchPoolOHLCV(network, pools[0].address, 'hour', poolCreatedAt);
-        updateChart(chartData);
+        const data = await fetchPoolOHLCV(network, pools[0].address, 'hour', poolCreatedAt);
+        setChartData(data);
       }
 
-      return pools;
     } catch (err) {
       console.error('Error fetching pool data:', err);
-      throw err;
+      setError('Failed to fetch pool data');
     }
   };
 
@@ -192,173 +278,57 @@ function App() {
     }
   };
 
-  const updateChart = async (data) => {
+  const handleTweetUrl = async (e) => {
+    e.preventDefault();
+    setError(null);
+    
+    if (!tweetUrl) {
+      setError('Please enter a tweet URL');
+      return;
+    }
+
     try {
-      console.log('Updating chart with data points:', data.length);
-      
-      if (chartInstance.current) {
-        chartInstance.current.destroy();
-        chartInstance.current = null;
-      }
-
-      if (!data || data.length === 0) {
-        console.warn('No data to display in chart');
-        return;
-      }
-
-      // Calculate time range of the data
-      const timeRange = data[data.length - 1].x - data[0].x; // in milliseconds
-      const hoursRange = timeRange / (1000 * 60 * 60);
-      
-      // Determine appropriate time unit and step size
-      let timeUnit, stepSize;
-      if (hoursRange <= 24) {
-        timeUnit = 'hour';
-        stepSize = 1;
-      } else if (hoursRange <= 72) {
-        timeUnit = 'hour';
-        stepSize = 4;
-      } else if (hoursRange <= 168) { // 1 week
-        timeUnit = 'day';
-        stepSize = 1;
-      } else {
-        timeUnit = 'day';
-        stepSize = Math.ceil(hoursRange / (24 * 7)); // Adjust step size based on range
-      }
-
-      console.log(`Chart time range: ${hoursRange.toFixed(1)} hours, using ${timeUnit} units with step size ${stepSize}`);
-
-      const ctx = chartRef.current.getContext('2d');
-      ctx.clearRect(0, 0, chartRef.current.width, chartRef.current.height);
-      
-      chartInstance.current = new ChartJS(ctx, {
-        type: 'line',
-        data: {
-          datasets: [
-            {
-              label: 'Price',
-              data: data,
-              borderColor: '#00ff00',
-              backgroundColor: 'rgba(0, 255, 0, 0.1)',
-              borderWidth: 2,
-              pointRadius: 0,
-              tension: 0.1,
-              fill: false
-            }
-          ]
+      const response = await fetch(`${BACKEND_URL}/api/tweet-timestamp`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: false,
-          interaction: {
-            intersect: false,
-            mode: 'index'
-          },
-          scales: {
-            x: {
-              type: 'time',
-              time: {
-                unit: timeUnit,
-                stepSize: stepSize,
-                displayFormats: {
-                  millisecond: 'HH:mm:ss.SSS',
-                  second: 'HH:mm:ss',
-                  minute: 'HH:mm',
-                  hour: 'MMM d, HH:mm',
-                  day: 'MMM d',
-                  week: 'MMM d',
-                  month: 'MMM yyyy',
-                  quarter: 'MMM yyyy',
-                  year: 'yyyy'
-                }
-              },
-              display: true,
-              grid: {
-                display: false
-              },
-              ticks: {
-                maxRotation: 0,
-                autoSkip: true,
-                maxTicksLimit: 10
-              }
-            },
-            y: {
-              display: true,
-              grid: {
-                display: false
-              },
-              ticks: {
-                callback: function(value) {
-                  if (value >= 1) {
-                    return '$' + value.toFixed(2);
-                  } else {
-                    return '$' + value.toFixed(6);
-                  }
-                }
-              }
-            }
-          },
-          plugins: {
-            tooltip: {
-              enabled: true,
-              mode: 'index',
-              intersect: false,
-              callbacks: {
-                label: function(context) {
-                  const price = context.parsed.y;
-                  return `Price: ${price >= 1 ? '$' + price.toFixed(2) : '$' + price.toFixed(6)}`;
-                },
-                title: function(context) {
-                  const date = new Date(context[0].parsed.x);
-                  return date.toLocaleString();
-                }
-              }
-            }
-          }
-        }
+        body: JSON.stringify({ tweetUrl })
       });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch tweet timestamp');
+      }
+
+      console.log('----------------------------------------');
+      console.log('🕒 Tweet Timestamps:');
+      console.log('Human readable:', data.humanReadable);
+      console.log('Unix timestamp:', data.timestamp);
+      console.log('----------------------------------------');
+      
+      setTweetTimestamp(data.timestamp);
+      
     } catch (err) {
-      console.error('Error updating chart:', err);
+      console.error('Error processing tweet URL:', err);
+      setError(err.message || 'Error processing tweet URL');
     }
   };
 
   const handleSearch = async (e) => {
     e.preventDefault();
-    if (!tokenAddress) return;
+    setError(null);
+
+    if (!tokenAddress) {
+      setError('Please enter a token address');
+      return;
+    }
 
     try {
       await fetchPoolData(tokenAddress, networks[selectedNetwork]);
     } catch (err) {
       setError('Failed to fetch data. Please check the token address.');
-    }
-  };
-
-  const handleTweetUrl = async (e) => {
-    e.preventDefault();
-    if (!tweetUrl) return;
-
-    if (!isValidTweetUrl(tweetUrl)) {
-      setError('Please enter a valid tweet URL');
-      return;
-    }
-
-    if (!scraper) {
-      setError('Twitter scraper not initialized. Check credentials.');
-      return;
-    }
-
-    try {
-      const timestamp = await fetchTimestampFromTweet(tweetUrl, scraper);
-      if (timestamp) {
-        console.log('Tweet timestamp:', new Date(timestamp * 1000).toLocaleString());
-        console.log('Unix timestamp:', timestamp);
-      } else {
-        setError('Could not fetch tweet timestamp');
-      }
-    } catch (err) {
-      setError('Error processing tweet URL');
-      console.error(err);
     }
   };
 
@@ -369,10 +339,20 @@ function App() {
     }
   }, [selectedNetwork]);
 
+  // Cleanup chart on component unmount
+  useEffect(() => {
+    return () => {
+      const chart = ChartJS.getChart(chartRef.current);
+      if (chart) {
+        chart.destroy();
+      }
+    };
+  }, []);
+
   return (
     <div className="App">
       <div className="container">
-        <h1>$ whopumped.eth ~</h1>
+        <h1>whopumped.fun? </h1>
         <div className="search-section">
           <form onSubmit={handleSearch} className="search-form">
             <input
@@ -409,20 +389,22 @@ function App() {
               Search
             </button>
           </form>
-          
+
           <form onSubmit={handleTweetUrl} className="tweet-form">
-            <input
-              type="text"
-              value={tweetUrl}
-              onChange={(e) => setTweetUrl(e.target.value)}
-              placeholder="Enter tweet URL..."
-              className="search-input"
-            />
+            <div className="tweet-input-container">
+              <input
+                type="text"
+                value={tweetUrl}
+                onChange={(e) => setTweetUrl(e.target.value)}
+                placeholder="Enter tweet URL..."
+                className="search-input"
+              />
+            </div>
             <button type="submit" className="search-button">
               Get Tweet Time
             </button>
           </form>
-          
+
           {error && <div className="error-message">{error}</div>}
         </div>
         <div className="chart-container">
