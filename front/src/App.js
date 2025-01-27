@@ -266,11 +266,12 @@ function App() {
 
       if (apiCallCount >= MAX_API_CALLS) {
         console.log(`Reached maximum API calls (${MAX_API_CALLS}). Some historical data might be missing.`);
+        setError('Note: Dataset is incomplete due to API limits, but chart is still displayed');
       }
 
       // Sort all data by time in ascending order
       const sortedData = allData.sort((a, b) => a.x - b.x);
-      console.log(`Final dataset has ${sortedData.length} points spanning ${PRICE_HISTORY_DAYS} days`);
+      console.log(`Final dataset has ${sortedData.length} points${apiCallCount >= MAX_API_CALLS ? ' (incomplete)' : ''}`);
       return sortedData;
     } catch (err) {
       console.error('Error fetching pool OHLCV data:', err);
@@ -352,7 +353,7 @@ function App() {
   return (
     <div className="App">
       <div className="container">
-        <h1>whopumped.fun? </h1>
+        <h1>whopumped? </h1>
         <div className="search-section">
           <form onSubmit={handleSearch} className="search-form">
             <input
@@ -401,7 +402,7 @@ function App() {
               />
             </div>
             <button type="submit" className="search-button">
-              Get Tweet Time
+              Get Tweet on Chart
             </button>
           </form>
 
